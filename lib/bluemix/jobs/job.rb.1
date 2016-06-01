@@ -1,0 +1,24 @@
+require 'resque'
+
+module Job
+  @queue = :default
+
+  def self.perform(params)
+    sleep 5
+File.open("/root/test","w") do |file|
+file.puts "Line 1"
+file.puts "Line 2"
+file.puts "Third and final line"
+end
+  end
+end
+
+module FailingJob
+  @queue = :failing
+
+  def self.perform(params)
+    sleep 1
+    raise 'not processable!'
+    puts "Processed a job!"
+  end
+end

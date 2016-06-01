@@ -1,0 +1,79 @@
+#!/usr/bin/env ruby
+
+ENV['BUNDLE_GEMFILE'] ||= File.expand_path('../../Gemfile', __FILE__)
+
+require 'erb'
+require 'rubygems'
+require 'bundler/setup'
+require 'yaml'
+require 'optparse'
+require 'socket'
+
+$LOAD_PATH.unshift File.join(File.dirname(__FILE__), '..', 'lib')
+require 'bluemix'
+require 'bluemix/app'
+
+config_file = nil
+index = nil
+erb = false
+
+opts = OptionParser.new do |op|
+  op.on('-c', '--config [ARG]', 'Configuration File') do |opt|
+    config_file = opt
+  end
+
+  op.on('-i', '--index [ARG]', Integer, 'Worker Index') do |opt|
+    index = opt
+  end
+
+  op.on('-e', '--[no-]erb', 'Treat Configuration as ERB Template') do |opt|
+    erb = opt
+  end
+end
+
+opts.parse!(ARGV.dup)
+
+config_file ||= ::File.expand_path('../../config/default.yml', __FILE__)
+config = nil
+
+begin
+  config = YAML.load_file(config_file)
+  config["root_dir"] = File.join(File.dirname(__FILE__), '..')
+  config["host"] = Socket.ip_address_list.detect{|intf| intf.ipv4_private?}.ip_address
+  config["blobstore_dir"] = "#{config["store_dir"]}/stemcells/"
+  puts "HOST: #{config["host"]}"
+rescue => exception
+  puts "Can't load config file: #{ exception }"
+  exit 1
+end
+puts "Config: #{config_file}"
+Bluemix::BM::App.new(config)
+
+resque_logging = config.fetch('resque', {}).fetch('logging', {})
+resque_log_device = Logger::LogDevice.new(resque_logging.fetch('file', STDOUT))
+resque_logger_level = resque_logging.fetch('level', 'debug').upcase
+Resque.logger = Logger.new(resque_log_device)
+Resque.logger.level = Logger.const_get(resque_logger_level)
+
+vlan_id=`grep -oP "PrimaryBackendNetworkComponent.*?}}" /var/vcap/bosh/spec.json | grep -o "[0-9]*" | tr -d '\n' `
+worker = nil
+queues = [ "worker_#{vlan_id}", "common" ]
+
+begin
+  worker = Resque::Worker.new(*queues)
+  worker.term_child = true
+rescue Resque::NoQueueError
+  abort 'set QUEUE env var, e.g. $ QUEUE=critical,high rake resque:work'
+end
+
+Resque.after_fork do
+  EM.error_handler { |e| puts "Error raised during event loop: #{e.message}" }
+  Thread.new { EM.run }
+end
+
+#Resque::Failure.backend = Resque::Failure::Backtrace
+
+worker.log "Starting worker #{worker}"
+
+worker.work(ENV['INTERVAL'] || 5) # interval, will block
+

@@ -1,0 +1,10 @@
+---
+port: 8080
+data_dir: /root/data
+blobstore_dir: /root/data/stemcells
+credentials:
+  user: admin
+  password: admin
+softlayer:
+  user: xxxxx
+  key: xxx

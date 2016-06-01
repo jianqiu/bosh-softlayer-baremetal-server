@@ -1,0 +1,79 @@
+#!/usr/bin/expect -f
+########################################################### {COPYRIGHT-TOP} ####
+# Licensed Materials - Property of IBM
+# CloudOE
+#
+# (C) Copyright IBM Corp. 2014
+#
+# US Government Users Restricted Rights - Use, duplication, or
+# disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
+########################################################### {COPYRIGHT-END} ####
+set dest [lindex $argv 0]
+set user [lindex $argv 1]
+set pwd [lindex $argv 2]
+# "send": send file; "run": run script; "check": check ssh key
+set action [lindex $argv 3] 
+set script [lindex $argv 4]
+
+
+#exp_internal 1
+exp_internal 0
+
+#check if all were provided
+if { $dest == "" || $script == "" || $user == "" || $pwd == "" || $action == ""}  {
+  puts "Usage: <host> <user> <password> <action> <script>\n"
+  exit 1
+}
+
+# procedure to attempt connecting; result 0 if OK, 1 otherwise
+proc connect {passw} {
+      expect {
+        "(yes/no)?"
+        {send "yes\n";exp_continue}
+        "denied*"
+        {return 2}
+        "assword:"
+        { send "$passw\n";exp_continue}
+        "ssh-keygen"
+        {return 3}
+        "]#*"
+        {return 0}
+        "100%"
+        {return 0}
+        eof
+        {return 0}
+      }
+    # timed out
+    return 1
+}
+
+if { $action == "check" } {
+  spawn ssh $user@$dest
+  set rez [connect $pwd]
+  if { $rez == 3 } {
+    close
+    spawn ssh-keygen -f "/root/.ssh/known_hosts" -R $dest
+    wait
+  } else {
+    send "exit\n"
+  }
+} elseif { $action == "send" } {
+  set file_name [split $script "/"]
+  set script_name [lindex $file_name end]
+  spawn scp $script $user@$dest:~/$script_name
+  set rez [connect $pwd]
+  wait
+} elseif { $action == "run" } {
+  set file_name [split $script " "]
+  set script_name [lindex $file_name 0]
+  spawn ssh $user@$dest
+  set rez2 [connect $pwd]
+  set timeout 600
+  send "chmod a+x ~/$script_name\n"
+  expect "]#*"
+  send "~/$script\n"
+  expect "]#*"
+  send "exit\n"
+}
+
+close

@@ -1,0 +1,74 @@
+#!/usr/bin/env ruby
+
+ENV['BUNDLE_GEMFILE'] ||= File.expand_path('../../Gemfile', __FILE__)
+
+require 'erb'
+require 'rubygems'
+require 'bundler/setup'
+require 'yaml'
+require 'optparse'
+
+$LOAD_PATH.unshift File.join(File.dirname(__FILE__), '..', 'lib')
+require 'bluemix'
+require 'bluemix/app'
+
+config_file = nil
+index = nil
+erb = false
+
+opts = OptionParser.new do |op|
+  op.on('-c', '--config [ARG]', 'Configuration File') do |opt|
+    config_file = opt
+  end
+
+  op.on('-i', '--index [ARG]', Integer, 'Worker Index') do |opt|
+    index = opt
+  end
+
+  op.on('-e', '--[no-]erb', 'Treat Configuration as ERB Template') do |opt|
+    erb = opt
+  end
+end
+
+opts.parse!(ARGV.dup)
+
+config_file ||= ::File.expand_path('../../config/default.yml', __FILE__)
+config = nil
+
+begin
+  config = YAML.load_file(config_file)
+  config["root_dir"] = File.join(File.dirname(__FILE__), '..')
+rescue => exception
+  puts "Can't load config file: #{ exception }"
+  exit 1
+end
+
+Bluemix::BM::App.new(config)
+
+resque_logging = config.fetch('resque', {}).fetch('logging', {})
+resque_log_device = Logger::LogDevice.new(resque_logging.fetch('file', STDOUT))
+resque_logger_level = resque_logging.fetch('level', 'info').upcase
+Resque.logger = Logger.new(resque_log_device)
+Resque.logger.level = Logger.const_get(resque_logger_level)
+
+worker = nil
+queues = "*"
+env TERM_CHILD=1 VVERBOSE=1 QUEUE=* COUNT=2  bundle exec rake resque:workers
+begin
+  worker = Resque::Worker.new(*queues)
+  worker.term_child = true
+rescue Resque::NoQueueError
+  abort 'set QUEUE env var, e.g. $ QUEUE=critical,high rake resque:work'
+end
+
+Resque.after_fork do
+  EM.error_handler { |e| puts "Error raised during event loop: #{e.message}" }
+  Thread.new { EM.run }
+end
+
+#Resque::Failure.backend = Resque::Failure::Backtrace
+
+worker.log "Starting worker #{worker}"
+
+worker.work(ENV['INTERVAL'] || 5) # interval, will block
+

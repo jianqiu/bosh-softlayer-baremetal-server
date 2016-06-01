@@ -1,0 +1,23 @@
+# This file describes the network interfaces available on your system
+# and how to activate them. For more information, see interfaces(5).
+
+auto lo
+# The loopback network interface
+iface lo inet loopback
+
+# eth0
+auto eth0
+allow-hotplug eth0
+iface eth0 inet static
+        address PRIVATE_IP
+        netmask PRIVATE_NETMASK
+        post-up route add -net 10.0.0.0 netmask 255.0.0.0 gw PRIVATE_GATEWAY
+
+# eth1
+auto eth1
+allow-hotplug eth1
+iface eth1 inet static
+        address PUBLIC_IP
+        netmask PUBLIC_NETMASK
+        gateway PUBLIC_GATEWAY
+

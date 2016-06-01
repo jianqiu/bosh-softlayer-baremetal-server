@@ -1,0 +1,76 @@
+#!/bin/bash -ex
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    "-root_passwd") ROOT_PASSWD="$2" ; shift ;;
+
+    "-stemcell") STEMCELL="$2" ; shift ;;
+
+    "-server_url") SERVER_URL="$2" ; shift ;;
+
+    "-private_ip") PRIVATE_IP="$2" ; shift ;;
+
+    "-private_gateway") PRIVATE_GATEWAY="$2" ; shift ;;
+
+    "-private_netmask") PRIVATE_NETMASK="$2" ; shift ;;
+
+    "-public_ip") PUBLIC_IP="$2" ; shift ;;
+
+    "-public_gateway") PUBLIC_GATEWAY="$2" ; shift ;;
+
+    "-public_netmask") PUBLIC_NETMASK="$2" ; shift ;;
+
+    *) echo unknown option $1
+       exit 1 ;;
+  esac
+  shift
+done
+
+#download the image
+#rm -f $STEMCELL
+#wget $SERVER_URL/stemcells/download/$STEMCELL
+
+#restore disk partitions
+sfdisk --force /dev/sda < disk_partitions
+sync
+sleep 5
+
+#restore the file system
+./fsarchiver restfs ${STEMCELL}.fsa id=0,dest=/dev/sda1 id=1,dest=/dev/sda6
+
+#mount the disk partitions
+mount -t ext3 /dev/sda6 /mnt | mount /dev/sda6 /mnt
+mount -t ext2 /dev/sda1 /mnt/boot
+
+#make grub
+tar -xzf grub.tgz -C /opt
+/opt/grub/sbin/grub-install --root-directory=/mnt /dev/sda
+
+#restor disk UUID 
+cp fstab /mnt/etc/fstab
+SWAP_UUID=`mkswap /dev/sda5 | grep UUID | sed "s/.*UUID=*//g"`
+sed -i "s/SWAP_UUID/$SWAP_UUID/" /mnt/etc/fstab
+UUID=`blkid | grep sda6 | sed s/.*UUID=\"//g | sed s/\".*//g`
+sed -i "s/EXT4_UUID/$UUID/" /mnt/etc/fstab
+UUID=`blkid | grep ext2 | sed s/.*UUID=\"//g | sed s/\".*//g`
+sed -i "s/BOOT_UUID/$UUID/" /mnt/etc/fstab
+
+source ./setup.sh
+
+echo "config the password for root"
+chroot /mnt passwd <<EOF
+$ROOT_PASSWD
+$ROOT_PASSWD
+EOF
+#root_pwd=`grep "^root" /etc/shadow`
+#sed -i "s/^root:.*/$root_pwd/" /mnt/etc/shadow
+#sed -i 's/PermitRootLogin without-password/PermitRootLogin yes/' /mnt/etc/ssh/sshd_config
+
+umount /mnt/boot
+umount /mnt
+
+sync
+sleep 5
+
+echo "reboot"
+reboot

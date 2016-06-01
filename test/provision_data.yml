@@ -1,0 +1,7 @@
+---
+stemcell_id: 121212
+resource_pool:
+  name: sdsds
+network_spec:
+  name: sdsd
+
