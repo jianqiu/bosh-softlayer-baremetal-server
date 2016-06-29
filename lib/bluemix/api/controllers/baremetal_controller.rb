@@ -25,6 +25,27 @@ module Bluemix::BM
         end
       end
 
+      # reload the stemcell based on server_id
+      put '/baremetal/server/:server_id/:stemcell/?:netboot_image?' do
+
+        begin
+          manifest = Psych.load(request.body) #request.body.read
+          image = params[:netboot_image] || Bluemix::BM::App.instance.config["default_image"]
+          server = Softlayer::BaremetalUtils.get_baremetal_by_id( params[:server_id] )
+          return Bluemix::BM::Common::Message.fail( { :message => "No available server found, please create new baremetal in the pool #{params[:server_id]}" } ) if server.nil?
+          task_id = Bluemix::BM::Common::TaskUtils.enqueue("worker_#{server["private_vlan_id"]}", Jobs::LoadStemcellJob, 'load stemcell', [server, params[:stemcell], image] )
+          Common::TaskUtils.update_task_status( task_id, "running" )
+
+
+          result = {
+              "task_id" => task_id
+          }
+          Bluemix::BM::Common::Message.success( result )
+        rescue => e
+          Bluemix::BM::Common::Message.fail( { :message => "Error: #{e}" }, e )
+        end
+      end
+
       put '/baremetals/reboot/:id/:mode' do
         begin
           Softlayer::BaremetalUtils.reboot_baremetal( params[:id], params[:mode] )
