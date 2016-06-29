@@ -9,36 +9,20 @@ module Bluemix::BM
    
         begin
           manifest = Psych.load(request.body) #request.body.read
-          image = params[:netboot_image] || Bluemix::BM::App.instance.config["default_image"] 
-          server = Softlayer::BaremetalUtils.get_baremetal( params[:spec_name] )
+          image = params[:netboot_image] || Bluemix::BM::App.instance.config["default_image"]
+          server = nil
+          if params[:spec_name].to_i.to_s == params[:spec_name] || params[:spec_name].is_a?(Numeric)
+            server = Softlayer::BaremetalUtils.get_baremetal_by_id( params[:spec_name] )
+          else
+            server = Softlayer::BaremetalUtils.get_baremetal( params[:spec_name] )
+          end
+
           return Bluemix::BM::Common::Message.fail( { :message => "No available server found, please create new baremetal in the pool #{params[:spec_name]}" } ) if server.nil?
           task_id = Bluemix::BM::Common::TaskUtils.enqueue("worker_#{server["private_vlan_id"]}", Jobs::LoadStemcellJob, 'load stemcell', [server, params[:stemcell], image] )
           Common::TaskUtils.update_task_status( task_id, "running" )
 
-        
           result = {
             "task_id" => task_id
-          }
-          Bluemix::BM::Common::Message.success( result )
-        rescue => e
-          Bluemix::BM::Common::Message.fail( { :message => "Error: #{e}" }, e )
-        end
-      end
-
-      # reload the stemcell based on server_id
-      put '/baremetal/server/:server_id/:stemcell/?:netboot_image?' do
-
-        begin
-          manifest = Psych.load(request.body) #request.body.read
-          image = params[:netboot_image] || Bluemix::BM::App.instance.config["default_image"]
-          server = Softlayer::BaremetalUtils.get_baremetal_by_id( params[:server_id] )
-          return Bluemix::BM::Common::Message.fail( { :message => "No available server found, please create new baremetal in the pool #{params[:server_id]}" } ) if server.nil?
-          task_id = Bluemix::BM::Common::TaskUtils.enqueue("worker_#{server["private_vlan_id"]}", Jobs::LoadStemcellJob, 'load stemcell', [server, params[:stemcell], image] )
-          Common::TaskUtils.update_task_status( task_id, "running" )
-
-
-          result = {
-              "task_id" => task_id
           }
           Bluemix::BM::Common::Message.success( result )
         rescue => e
