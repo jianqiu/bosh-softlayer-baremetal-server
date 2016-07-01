@@ -217,7 +217,7 @@ module Bluemix::BM
             name = ""
             begin
               name = spec["name_prefix"] + "-" + Time.now.utc.localtime.strftime("%Y%m%d-%H%M%S-%L")
-              create_baremetal( name, spec.dup, place_order )
+              create_baremetal_2( name, spec.dup, place_order )
               results << [name, 1, "ordered", spec["name_prefix"]]
               Bluemix::BM::App.instance.config["event_loger"].event_info( "Ordered #{name}!!" )
               sleep 1
@@ -290,6 +290,30 @@ module Bluemix::BM
               order_proc.call order
             }
           end
+
+      end
+
+      def self.create_baremetal_2(name, spec, place_order )
+        server_spec = spec["server_spec"]
+        Bluemix::BM::App.instance.config["event_loger"].event_info( "Spec: #{spec.to_json}" )
+
+        server_order = SoftLayer::BareMetalServerOrder.new()
+        server_order.cores = server_spec["cores"]
+        server_order.datacenter = SoftLayer::Datacenter.datacenter_named( spec["datacenter"] )
+        server_order.hostname = name
+        server_order.domain = spec["domain"]
+        server_order.hourly = server_spec["hourly"]
+        server_order.max_port_speed = server_spec["max_port_speed"]
+        server_order.memory = server_spec["memory"]
+        server_order.private_vlan_id = server_spec["private_vlan_id"]
+        server_order.public_vlan_id = server_spec["public_vlan_id"]
+        server_order.os_reference_code = 'UBUNTU_14_64'
+
+        if place_order
+          server_order.place_order!
+        else
+          server_order.verify
+        end
 
       end
 
