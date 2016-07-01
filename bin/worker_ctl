@@ -55,7 +55,19 @@ resque_logger_level = resque_logging.fetch('level', 'debug').upcase
 Resque.logger = Logger.new(resque_log_device)
 Resque.logger.level = Logger.const_get(resque_logger_level)
 
-vlan_id=`grep -oP "PrimaryBackendNetworkComponent.*?}}" /var/vcap/bosh/spec.json | grep -o "[0-9]*" | tr -d '\n' `
+virtual_server_info='vs.json'
+if not File.exists?(virtual_server_info)
+  username=config["softlayer"]["user"]
+  username ["@"] = "%40"
+  api_key=config["softlayer"]["key"]
+  ip_address=`ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 | awk '{ print $1}' | tr -d '\n'`
+  curl='/usr/bin/curl'
+  url="https://#{username}:#{api_key}" + '@api.softlayer.com/rest/v3/SoftLayer_Account/getVirtualGuests?objectMask=mask[primaryBackendNetworkComponent.networkVlan.id]&objectFilter={"virtualGuests":{"primaryBackendIpAddress":{"operation":"' + "#{ip_address}"+ '"}}}'
+  curl_args='-g'
+  cmd="#{curl} #{curl_args} '#{url}' > vs.json"
+  system cmd
+end
+vlan_id=`grep -oP "networkVlan.*?}}]" vs.json | grep -o "[0-9]*"|awk "NR==1"`
 worker = nil
 queues = [ "worker_#{vlan_id}", "common" ]
 
