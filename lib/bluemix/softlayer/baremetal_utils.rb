@@ -307,7 +307,7 @@ module Bluemix::BM
         server_order.memory = server_spec["memory"]
         server_order.private_vlan_id = server_spec["private_vlan_id"]
         server_order.public_vlan_id = server_spec["public_vlan_id"]
-        server_order.os_reference_code = 'UBUNTU_14_64'
+        server_order.os_reference_code = 'CENTOS_7_64'
 
         if place_order
           server_order.place_order!

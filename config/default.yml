@@ -8,3 +8,11 @@ credentials:
 softlayer:
   user: xxxxx
   key: xxx
+redis:
+  address: 1.2.3.4
+  port: 1234
+  password: xxxxxxxx
+resque:
+ logging:
+   file: test.log
+   level: INFO
