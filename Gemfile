@@ -8,6 +8,6 @@ gem "thin"
 gem "json"
 gem "yajl-ruby"
 gem "resque"
-gem 'softlayer_api', '>=2.2.2'
+gem 'softlayer_api', '>=3.2.1'
 gem 'fog-softlayer'
 gem 'remote_lock'
