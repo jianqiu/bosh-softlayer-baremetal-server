@@ -67,6 +67,7 @@ module Bluemix::BM
       def self.get_baremetal_by_id( id )
         begin
           server = SoftLayer::BareMetalServer.server_with_id( id )
+          self.update_state_new2loading( server["id"] )
           self.to_server( server )
         rescue => e
           nil
